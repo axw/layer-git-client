@@ -56,25 +56,34 @@ def configure_git(git):
 def clone_repo(git):
     url = git.url()
     status_set('waiting', 'Cloning {}'.format(url))
-
-    env = os.environ.copy()
-    if git.get_remote('protocol') == 'ssh':
-        env['GIT_SSH'] = os.path.abspath(GIT_SSH)
-        hostname = git.get_remote('hostname')
-        ssh_host_key = git.get_remote('ssh-host-key')
-        write_git_ssh(hostname, ssh_host_key)
-
     path = repo_path()
     if os.path.exists(path):
         shutil.rmtree(path)
-    subprocess.check_call(['git', 'clone', url, path], env=env)
+    git_exec(git, 'clone', url, path)
     # TODO(axw) store the current commit in local state
     status_set('active', '')
     set_state('git.repo.cloned')
 
 
-# TODO(axw) when('git.commit.changed')
-# TODO(axw) need to check if hostname changed, update remote
+@when('git.commit.changed')
+def commit_changed(git):
+    sha = git.get_remote('git-commit')
+    path = repo_path()
+    git_exec(git, 'fetch', 'origin', cwd=path)
+    git_exec(git, 'checkout', sha, cwd=path)
+    git.set_commit(sha)
+
+
+def git_exec(git, *args, **kwargs):
+    env = os.environ
+    if git.get_remote('protocol') == 'ssh':
+        env = env.copy()
+        env['GIT_SSH'] = os.path.abspath(GIT_SSH)
+        hostname = git.get_remote('hostname')
+        ssh_host_key = git.get_remote('ssh-host-key')
+        # TODO(axw) only rewrite if args change
+        write_git_ssh(hostname, ssh_host_key)
+    subprocess.check_call(['git'] + list(args), env=env, **kwargs)
 
 
 def write_git_ssh(hostname, ssh_host_key):
