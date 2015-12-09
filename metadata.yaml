@@ -1,14 +1,14 @@
-name: git
-summary: fast, scalable, distributed revision control system
+name: git-client
+summary: client for fast, scalable, distributed revision control system
 maintainer: Andrew Wilkins <axwalk@gmail.com>
 description: |
   The git charm deploys and controls a git-over-ssh server.
 tags:
   - application_development
   - storage
-provides:
+requires:
   git:
     interface: git
-storage:
-  repo-root:
-    type: filesystem
+#storage:
+#  repo:
+#    type: filesystem
