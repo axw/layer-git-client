@@ -57,8 +57,6 @@ def clone_repo(git):
     url = git.url()
     status_set('waiting', 'Cloning {}'.format(url))
     path = repo_path()
-    if os.path.exists(path):
-        shutil.rmtree(path)
     git_exec(git, 'clone', url, path)
     # TODO(axw) store the current commit in local state
     status_set('active', '')
@@ -89,19 +87,17 @@ def git_exec(git, *args, **kwargs):
 def write_git_ssh(hostname, ssh_host_key):
     # TODO(axw) validate format of ssh_host_key
     content = '{} {}'.format(hostname, ssh_host_key)
-    host.write_file(SSH_USER_KNOWN_HOSTS_FILE, content, 'root', 'root', 0o600)
+    host.write_file(SSH_USER_KNOWN_HOSTS_FILE,
+                    content.encode('utf-8'),
+                    'root', 'root', 0o600)
 
     content = textwrap.dedent("""\
     #!/bin/bash
     exec /usr/bin/ssh -i {} -o UserKnownHostsFile={} $*
     """.format(os.path.abspath(SSH_IDENTITY), os.path.abspath(SSH_USER_KNOWN_HOSTS_FILE)))
-    host.write_file(GIT_SSH, content, 'root', 'root', 0o700)
+    host.write_file(GIT_SSH, content.encode('utf-8'), 'root', 'root', 0o700)
 
 
 def repo_path():
-    # TODO(axw) when reactive support for storage is fixed, use
-    # storage.
-    #return storage_get('location', storage_list('repo')[0])
-    path = 'repo'
-    return path
+    return storage_get('location', storage_list('repo')[0])
 

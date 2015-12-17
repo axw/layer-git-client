@@ -6,9 +6,11 @@ description: |
 tags:
   - application_development
   - storage
+series:
+  - trusty
 requires:
   git:
     interface: git
-#storage:
-#  repo:
-#    type: filesystem
+storage:
+  repo:
+    type: filesystem
