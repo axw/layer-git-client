@@ -8,8 +8,6 @@ from charmhelpers.core.hookenv import (
     status_set,
     open_port,
     config,
-    storage_list,
-    storage_get,
 )
 
 from charmhelpers.core import host
@@ -26,6 +24,8 @@ from charms.reactive import (
     set_state,
     remove_state,
 )
+
+from gitlib import git_repo_path
 
 
 # created in the charm directory.
@@ -52,21 +52,26 @@ def configure_git(git):
 
 
 @when('git.available')
-@when_not('git.repo.cloned')
+@when_not('git.repo-available')
 def clone_repo(git):
     url = git.url()
     status_set('waiting', 'Cloning {}'.format(url))
-    path = repo_path()
+    # TODO(axw) separate paths for .git and contents
+    path = git_repo_path()
+    dotgit = os.path.join(path, '.git')
+    if os.path.exists(dotgit):
+        shutil.rmtree(dotgit)
     git_exec(git, 'clone', url, path)
     # TODO(axw) store the current commit in local state
     status_set('active', '')
-    set_state('git.repo.cloned')
+    git.set_local('repo-path', path)
+    set_state('git.repo-available')
 
 
 @when('git.commit.changed')
 def commit_changed(git):
     sha = git.get_remote('git-commit')
-    path = repo_path()
+    path = git_repo_path()
     git_exec(git, 'fetch', 'origin', cwd=path)
     git_exec(git, 'checkout', sha, cwd=path)
     git.set_commit(sha)
@@ -96,8 +101,3 @@ def write_git_ssh(hostname, ssh_host_key):
     exec /usr/bin/ssh -i {} -o UserKnownHostsFile={} $*
     """.format(os.path.abspath(SSH_IDENTITY), os.path.abspath(SSH_USER_KNOWN_HOSTS_FILE)))
     host.write_file(GIT_SSH, content.encode('utf-8'), 'root', 'root', 0o700)
-
-
-def repo_path():
-    return storage_get('location', storage_list('repo')[0])
-
