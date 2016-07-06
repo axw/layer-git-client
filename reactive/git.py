@@ -44,16 +44,27 @@ def install_git():
 def configure_git(git):
     status_set('maintenance', 'Configuring ssh and git')
     username = service_name()
-    subprocess.check_call(['ssh-keygen', '-P', '', '-f', SSH_IDENTITY])
+    if not os.path.exists(SSH_IDENTITY):
+        subprocess.check_call(['ssh-keygen', '-P', '', '-f', SSH_IDENTITY])
     public_key = open(SSH_IDENTITY + '.pub').read()
     git.configure(username, public_key)
-    status_set('waiting', 'Waiting for git repository to be created')
     set_state('git.configured')
+
+
+@when('git.configured')
+@when_not('git.available')
+def waiting_availability():
+    status_set('waiting', 'Waiting for git repository to be created')
 
 
 @when('git.available')
 @when_not('git.repo-available')
 def clone_repo(git):
+    # TODO(axw) only rewrite if server retports
+    # changes to the relation settings.
+    hostname = git.get_remote('hostname')
+    write_git_ssh(hostname, git.ssh_host_keys())
+
     url = git.url()
     status_set('waiting', 'Cloning {}'.format(url))
     # TODO(axw) separate paths for .git and contents
@@ -62,7 +73,11 @@ def clone_repo(git):
     if os.path.exists(dotgit):
         shutil.rmtree(dotgit)
     git_exec(git, 'clone', url, path)
-    # TODO(axw) store the current commit in local state
+
+    # set the initial commit in local state
+    commit = git_exec(git, 'rev-parse', cwd=path)
+    if commit:
+        git.set_commit(commit)
     status_set('active', '')
     git.set_local('repo-path', path)
     set_state('git.repo-available')
@@ -78,22 +93,27 @@ def commit_changed(git):
 
 
 def git_exec(git, *args, **kwargs):
+    "git_exec executes a git command and returns its output."
+
     env = os.environ
     if git.get_remote('protocol') == 'ssh':
         env = env.copy()
         env['GIT_SSH'] = os.path.abspath(GIT_SSH)
-        hostname = git.get_remote('hostname')
-        ssh_host_key = git.get_remote('ssh-host-key')
-        # TODO(axw) only rewrite if args change
-        write_git_ssh(hostname, ssh_host_key)
-    subprocess.check_call(['git'] + list(args), env=env, **kwargs)
+    return subprocess.check_output(['git'] + list(args), env=env, **kwargs)
 
 
-def write_git_ssh(hostname, ssh_host_key):
-    # TODO(axw) validate format of ssh_host_key
-    content = '{} {}'.format(hostname, ssh_host_key)
+def write_git_ssh(hostname, ssh_host_keys):
+    """
+    write_git_ssh writes the git-ssh script used by git commands when
+    the protocol is 'ssh'.
+    """
+
+    # TODO(axw) validate format of ssh_host_keys
+    content_lines = []
+    for ssh_host_key in ssh_host_keys:
+        content_lines.append('{} {}'.format(hostname, ssh_host_key))
     host.write_file(SSH_USER_KNOWN_HOSTS_FILE,
-                    content.encode('utf-8'),
+                    '\n'.join(content_lines).encode('utf-8'),
                     'root', 'root', 0o600)
 
     content = textwrap.dedent("""\
